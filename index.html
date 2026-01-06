@@ -175,17 +175,19 @@
             width: auto;
             padding: 8px 15px;
             z-index: 200;
-            background: rgba(0, 0, 0, 0.5);
-            color: var(--ui-color);
+            background: var(--ui-color);
+            color: black;
             border: 1px solid var(--ui-color);
-            opacity: 0.8;
-            transition: color 0.3s, border-color 0.3s, background-color 0.3s;
+            opacity: 1;
+            transition: color 0.3s, border-color 0.3s, background-color 0.3s, opacity 0.3s;
+            font-weight: bold;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            cursor: pointer;
         }
 
         #toggle-ui-btn:hover {
-            opacity: 1;
-            background: var(--ui-color);
-            color: black;
+            filter: brightness(1.2);
         }
 
         .hidden-ui {
@@ -198,7 +200,7 @@
 <body>
 
     <!-- Toggle UI Button -->
-    <button id="toggle-ui-btn">Hide UI</button>
+    <button id="toggle-ui-btn">Debug</button>
 
     <div id="status">
         Status: Initializing...
@@ -442,18 +444,29 @@
 
             // Toggle UI
             const toggleBtn = document.getElementById('toggle-ui-btn');
+
             toggleBtn.onclick = () => {
                 uiVisible = !uiVisible;
                 const els = [
                     document.getElementById('settings-panel'),
-                    document.getElementById('debug-container'),
+                    // document.getElementById('debug-container'), // Removed from toggle list to keep always visible
                     document.getElementById('status')
                 ];
                 els.forEach(el => {
                     if (uiVisible) el.classList.remove('hidden-ui');
                     else el.classList.add('hidden-ui');
                 });
-                toggleBtn.innerText = uiVisible ? "Hide UI" : "Show UI";
+
+                // Visual Feedback for Toggle
+                if (uiVisible) {
+                    toggleBtn.style.opacity = "1";
+                    toggleBtn.style.background = "var(--ui-color)";
+                    toggleBtn.style.color = "black";
+                } else {
+                    toggleBtn.style.opacity = "0.5";
+                    toggleBtn.style.background = "rgba(0,0,0,0.5)";
+                    toggleBtn.style.color = "var(--ui-color)";
+                }
             };
 
             // Model Upload
@@ -772,9 +785,35 @@
             if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                 const landmarks = results.multiFaceLandmarks[0];
 
-                // Draw Mesh
+                // Draw Mesh & Eyes
                 if (window.drawConnectors) {
-                    drawConnectors(debugCtx, landmarks, FaceMesh.FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                    // Fix: Constants are often global in the script-tag version, not on the class
+                    const tesselation = window.FACEMESH_TESSELATION || window.FaceMesh?.FACEMESH_TESSELATION;
+                    const rightEye = window.FACEMESH_RIGHT_EYE || window.FaceMesh?.FACEMESH_RIGHT_EYE;
+                    const leftEye = window.FACEMESH_LEFT_EYE || window.FaceMesh?.FACEMESH_LEFT_EYE;
+                    const rightIris = window.FACEMESH_RIGHT_IRIS || window.FaceMesh?.FACEMESH_RIGHT_IRIS;
+                    const leftIris = window.FACEMESH_LEFT_IRIS || window.FaceMesh?.FACEMESH_LEFT_IRIS;
+
+                    // Face Mesh (faint)
+                    if (tesselation) {
+                        drawConnectors(debugCtx, landmarks, tesselation, { color: '#C0C0C040', lineWidth: 1 });
+                    }
+
+                    // Eye Outlines
+                    if (rightEye) {
+                        drawConnectors(debugCtx, landmarks, rightEye, { color: '#FF3030', lineWidth: 2 });
+                    }
+                    if (leftEye) {
+                        drawConnectors(debugCtx, landmarks, leftEye, { color: '#30FF30', lineWidth: 2 });
+                    }
+
+                    // Irises
+                    if (rightIris) {
+                        drawConnectors(debugCtx, landmarks, rightIris, { color: '#FF0000', lineWidth: 2 });
+                    }
+                    if (leftIris) {
+                        drawConnectors(debugCtx, landmarks, leftIris, { color: '#00FF00', lineWidth: 2 });
+                    }
                 }
 
                 // --- Tracking Logic ---
