@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Off-Axis Window Illusion</title>
+    <link rel="icon" type="image/png" href="taurus-fav.png">
     <style>
         :root {
             --ui-color: #FF4500;
@@ -206,21 +207,25 @@
             opacity: 0 !important;
             pointer-events: none !important;
         }
+
+        #debug-container.hidden-ui {
+            display: none;
+        }
     </style>
 </head>
 
 <!-- Top Right UI Controls -->
 <div id="top-right-ui">
-    <button id="toggle-facecam-btn" class="top-ui-btn">Facecam</button>
-    <button id="toggle-ui-btn" class="top-ui-btn">Debug</button>
+    <button id="toggle-facecam-btn" class="top-ui-btn toggled-off">Facecam</button>
+    <button id="toggle-ui-btn" class="top-ui-btn toggled-off">Debug</button>
 </div>
 
-<div id="status">
+<div id="status" class="hidden-ui">
     Status: Initializing...
     <div id="error-log"></div>
 </div>
 
-<div id="settings-panel">
+<div id="settings-panel" class="hidden-ui">
     <div class="setting-row">
         <label>Theme Color <input type="color" id="themeColor" value="#FF4500"></label>
     </div>
@@ -262,7 +267,7 @@
     <button id="reset-btn">Reset Defaults</button>
 </div>
 
-<div id="debug-container">
+<div id="debug-container" class="hidden-ui">
     <video id="input-video" playsinline></video>
     <canvas id="debug-canvas"></canvas>
 </div>
@@ -322,7 +327,8 @@
     let particles; // Track particles to prevent memory leak
     let eyePos = new THREE.Vector3(0, 0, CONFIG.defaultEyeZ);
     let targetEyePos = new THREE.Vector3(0, 0, CONFIG.defaultEyeZ);
-    let uiVisible = true;
+    let uiVisible = false;
+    let facecamVisible = false;
     let gridGroup; // Store grid group to rebuild on resize if needed
 
     const videoElement = document.getElementById('input-video');
@@ -457,7 +463,6 @@
         // Toggle UI
         const toggleBtn = document.getElementById('toggle-ui-btn');
         const facecamBtn = document.getElementById('toggle-facecam-btn');
-        let facecamVisible = true;
 
         toggleBtn.onclick = () => {
             uiVisible = !uiVisible;
