@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Off-Axis Window Illusion</title>
+    <style>
+        :root {
+            --ui-color: #FF4500;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Debug UI Container (Bottom Right) */
+        #debug-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 240px;
+            height: 180px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid var(--ui-color);
+            border-radius: 8px;
+            overflow: hidden;
+            z-index: 100;
+            transition: opacity 0.3s, border-color 0.3s;
+        }
+
+        #input-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            /* Mirror the webcam feed */
+            opacity: 0.6;
+        }
+
+        #debug-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            /* Mirror the overlay to match video */
+        }
+
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: var(--ui-color);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            pointer-events: none;
+            border: 1px solid var(--ui-color);
+            max-width: 80%;
+            transition: opacity 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        #error-log {
+            color: red;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+
+        /* Settings Panel (Moved to Bottom Left) */
+        #settings-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 240px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid var(--ui-color);
+            border-radius: 8px;
+            padding: 15px;
+            color: var(--ui-color);
+            font-family: 'Courier New', Courier, monospace;
+            z-index: 101;
+            transition: opacity 0.3s, transform 0.3s, color 0.3s, border-color 0.3s;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .setting-row {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 11px;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--ui-color);
+            cursor: pointer;
+        }
+
+        input[type=color] {
+            border: none;
+            width: 30px;
+            height: 20px;
+            cursor: pointer;
+            background: none;
+            padding: 0;
+        }
+
+        button {
+            background: var(--ui-color);
+            color: #000;
+            border: none;
+            padding: 8px 10px;
+            width: 100%;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            margin-top: 5px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-size: 11px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+        }
+
+        /* File Input Styling */
+        input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-upload {
+            border: 1px dashed var(--ui-color);
+            display: inline-block;
+            padding: 6px 12px;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--ui-color);
+            transition: color 0.3s, border-color 0.3s;
+        }
+
+        .custom-file-upload:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Toggle UI Button (Top Right) */
+        #toggle-ui-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: auto;
+            padding: 8px 15px;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.5);
+            color: var(--ui-color);
+            border: 1px solid var(--ui-color);
+            opacity: 0.8;
+            transition: color 0.3s, border-color 0.3s, background-color 0.3s;
+        }
+
+        #toggle-ui-btn:hover {
+            opacity: 1;
+            background: var(--ui-color);
+            color: black;
+        }
+
+        .hidden-ui {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Toggle UI Button -->
+    <button id="toggle-ui-btn">Hide UI</button>
+
+    <div id="status">
+        Status: Initializing...
+        <div id="error-log"></div>
+    </div>
+
+    <div id="settings-panel">
+        <div class="setting-row">
+            <label>Theme Color <input type="color" id="themeColor" value="#FF4500"></label>
+        </div>
+        <div class="setting-row">
+            <label>Light Intensity <span id="val-light"></span></label>
+            <input type="range" id="light" min="0" max="10" step="0.1">
+        </div>
+        <div class="setting-row">
+            <label>Rotation Speed <span id="val-rotSpeed"></span></label>
+            <input type="range" id="rotSpeed" min="0" max="5" step="0.1">
+        </div>
+        <hr style="border-color: var(--ui-color); opacity: 0.3; margin: 10px 0;">
+        <div class="setting-row">
+            <label>Sensitivity X <span id="val-sensX"></span></label>
+            <input type="range" id="sensX" min="0" max="10" step="0.1">
+        </div>
+        <div class="setting-row">
+            <label>Sensitivity Y <span id="val-sensY"></span></label>
+            <input type="range" id="sensY" min="0" max="10" step="0.1">
+        </div>
+        <div class="setting-row">
+            <label>Camera Zoom (Dist) <span id="val-dist"></span></label>
+            <input type="range" id="dist" min="10" max="100" step="1">
+        </div>
+        <div class="setting-row">
+            <label>Object Z Position <span id="val-objZ"></span></label>
+            <input type="range" id="objZ" min="-30" max="10" step="0.5">
+        </div>
+        <div class="setting-row">
+            <label>Smoothing <span id="val-smooth"></span></label>
+            <input type="range" id="smooth" min="0.01" max="0.5" step="0.01">
+        </div>
+
+        <label class="custom-file-upload">
+            <input type="file" id="model-upload" accept=".glb,.gltf,.obj">
+            Upload Model (.glb/.gltf/.obj)
+        </label>
+
+        <button id="reset-btn">Reset Defaults</button>
+    </div>
+
+    <div id="debug-container">
+        <video id="input-video" playsinline></video>
+        <canvas id="debug-canvas"></canvas>
+    </div>
+
+    <!-- Load MediaPipe via Global Scripts (More reliable for single-file) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+
+    <!-- Three.js Import Map with Addons -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+        // --- Configuration ---
+        // Storing defaults to allow reset
+        const DEFAULT_CONFIG = {
+            screenWorldWidth: 20,
+            screenWorldHeight: 12, // Default fallback
+            defaultEyeZ: 35,      // Camera base distance
+            objectZ: -10,         // Pushed back slightly to sit inside the box
+            smoothing: 0.15,
+            sensitivityX: 2.5,
+            sensitivityY: 2.0,
+            depthScale: 20,
+            uiColor: '#FF4500',
+            lightIntensity: 1.0,
+            rotationSpeed: 1.0
+        };
+
+        // Active Config
+        const CONFIG = { ...DEFAULT_CONFIG };
+
+        // --- Global State ---
+        let scene, camera, renderer, object;
+        // Light references
+        let cameraLight, ambientLight, orangeLight, blueLight;
+        // Base intensities to multiply against
+        const BASE_INTENSITY = {
+            ambient: 1.2,
+            camera: 5.0,
+            orange: 4.0,
+            blue: 5.0
+        };
+
+        let particles; // Track particles to prevent memory leak
+        let eyePos = new THREE.Vector3(0, 0, CONFIG.defaultEyeZ);
+        let targetEyePos = new THREE.Vector3(0, 0, CONFIG.defaultEyeZ);
+        let uiVisible = true;
+        let gridGroup; // Store grid group to rebuild on resize if needed
+
+        const videoElement = document.getElementById('input-video');
+        const debugCanvas = document.getElementById('debug-canvas');
+        const debugCtx = debugCanvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const errorLog = document.getElementById('error-log');
+
+        function logError(msg) {
+            console.error(msg);
+            errorLog.innerText = msg;
+        }
+
+        // --- Initialization ---
+        function init() {
+            try {
+                // 1. Setup Three.js Scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x050510);
+                scene.fog = new THREE.FogExp2(0x050510, 0.02);
+
+                // 2. Setup Camera
+                camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+                scene.add(camera);
+
+                // 3. Renderer
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                document.body.appendChild(renderer.domElement);
+
+                // 4. Calculate World Screen Dimensions based on Aspect Ratio
+                let aspect = window.innerWidth / window.innerHeight;
+                if (!isFinite(aspect) || aspect === 0) aspect = 1.6;
+                CONFIG.screenWorldHeight = CONFIG.screenWorldWidth / aspect;
+
+                setupUI();
+                createSceneContent();
+                setupLights();
+
+                // Start Animation Loop
+                animate();
+
+                // Handle Resize
+                window.addEventListener('resize', onWindowResize);
+            } catch (e) {
+                logError("ThreeJS Init Failed: " + e.message);
+            }
+        }
+
+        function setupUI() {
+            const setCSSVar = (name, value) => {
+                document.documentElement.style.setProperty(name, value);
+            };
+
+            const bind = (id, key, callback) => {
+                const el = document.getElementById(id);
+                const valEl = document.getElementById('val-' + id);
+
+                // Set initial value
+                el.value = CONFIG[key];
+                if (valEl) valEl.innerText = CONFIG[key];
+
+                // Bind event
+                el.oninput = (e) => {
+                    const val = e.target.type === 'range' ? parseFloat(e.target.value) : e.target.value;
+                    CONFIG[key] = val;
+                    if (valEl) valEl.innerText = val;
+                    if (callback) callback(val);
+                };
+            };
+
+            // Bind Settings
+            bind('sensX', 'sensitivityX');
+            bind('sensY', 'sensitivityY');
+            bind('smooth', 'smoothing');
+            bind('rotSpeed', 'rotationSpeed');
+
+            bind('dist', 'defaultEyeZ', (val) => {
+                // Gently nudge target if no face tracking
+                if (statusEl.innerText.includes("not detected")) {
+                    targetEyePos.z = val;
+                }
+            });
+
+            bind('objZ', 'objectZ', (val) => {
+                if (object) object.position.z = val;
+            });
+
+            // Consolidated Theme Color
+            bind('themeColor', 'uiColor', (val) => {
+                setCSSVar('--ui-color', val);
+                createSceneContent(); // Rebuilds grid & particles with new color
+            });
+
+            // Light Intensity
+            bind('light', 'lightIntensity', (val) => {
+                updateLights(val);
+            });
+
+            // Reset Button
+            document.getElementById('reset-btn').onclick = () => {
+                const currentH = CONFIG.screenWorldHeight;
+                Object.assign(CONFIG, DEFAULT_CONFIG);
+                CONFIG.screenWorldHeight = currentH;
+
+                // Update UI elements
+                document.getElementById('sensX').value = CONFIG.sensitivityX;
+                document.getElementById('sensY').value = CONFIG.sensitivityY;
+                document.getElementById('dist').value = CONFIG.defaultEyeZ;
+                document.getElementById('objZ').value = CONFIG.objectZ;
+                document.getElementById('smooth').value = CONFIG.smoothing;
+                document.getElementById('themeColor').value = CONFIG.uiColor;
+                document.getElementById('light').value = CONFIG.lightIntensity;
+                document.getElementById('rotSpeed').value = CONFIG.rotationSpeed;
+
+                // Update Labels
+                ['sensX', 'sensY', 'dist', 'objZ', 'smooth', 'light', 'rotSpeed'].forEach(id => {
+                    const valEl = document.getElementById('val-' + id);
+                    if (valEl) valEl.innerText = document.getElementById(id).value;
+                });
+
+                // Apply changes
+                targetEyePos.z = CONFIG.defaultEyeZ;
+                if (object) object.position.z = CONFIG.objectZ;
+                setCSSVar('--ui-color', CONFIG.uiColor);
+                createSceneContent();
+                updateLights(CONFIG.lightIntensity);
+            };
+
+            // Toggle UI
+            const toggleBtn = document.getElementById('toggle-ui-btn');
+            toggleBtn.onclick = () => {
+                uiVisible = !uiVisible;
+                const els = [
+                    document.getElementById('settings-panel'),
+                    document.getElementById('debug-container'),
+                    document.getElementById('status')
+                ];
+                els.forEach(el => {
+                    if (uiVisible) el.classList.remove('hidden-ui');
+                    else el.classList.add('hidden-ui');
+                });
+                toggleBtn.innerText = uiVisible ? "Hide UI" : "Show UI";
+            };
+
+            // Model Upload
+            document.getElementById('model-upload').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const url = URL.createObjectURL(file);
+                const extension = file.name.split('.').pop().toLowerCase();
+
+                statusEl.innerHTML = `Status: Loading ${file.name}...`;
+
+                // Select Loader based on extension
+                let loader;
+                if (extension === 'obj') {
+                    loader = new OBJLoader();
+                } else {
+                    loader = new GLTFLoader();
+                }
+
+                loader.load(url, (data) => {
+                    if (object) scene.remove(object);
+
+                    // OBJLoader returns the Group directly. GLTFLoader returns an object with a .scene property.
+                    object = (extension === 'obj') ? data : data.scene;
+
+                    // If OBJ, apply a default nice material because OBJs often lack one in single-file uploads
+                    if (extension === 'obj') {
+                        object.traverse((child) => {
+                            if (child.isMesh) {
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: 0xeeeeee,
+                                    metalness: 0.5,
+                                    roughness: 0.2
+                                });
+                            }
+                        });
+                    }
+
+                    // Reset transforms to ensure clean bounding box calculation
+                    object.position.set(0, 0, 0);
+                    object.rotation.set(0, 0, 0);
+                    object.updateMatrixWorld(true);
+
+                    // 1. Normalize Scale
+                    // Calculate Bounding Box of MESHES ONLY (ignore lights/cameras/helpers)
+                    let boxRaw = new THREE.Box3();
+                    object.traverse((child) => {
+                        if (child.isMesh) boxRaw.expandByObject(child);
+                    });
+                    if (boxRaw.isEmpty()) boxRaw.setFromObject(object); // Fallback
+
+                    const sizeRaw = boxRaw.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(sizeRaw.x, sizeRaw.y, sizeRaw.z);
+                    const scale = 8 / maxDim; // Target size approx 8 units
+                    object.scale.setScalar(scale);
+
+                    // 2. Center the Object
+                    // Update matrix again with new scale
+                    object.updateMatrixWorld(true);
+
+                    let box = new THREE.Box3();
+                    object.traverse((child) => {
+                        if (child.isMesh) box.expandByObject(child);
+                    });
+                    if (box.isEmpty()) box.setFromObject(object);
+
+                    const center = box.getCenter(new THREE.Vector3());
+
+                    // Move the object so its center aligns with world 0,0,0
+                    object.position.x = -center.x;
+                    object.position.y = -center.y;
+
+                    // For Z, center it then apply offset
+                    object.position.z = -center.z + CONFIG.objectZ;
+
+                    scene.add(object);
+                    statusEl.innerText = "Status: Tracking Active (Model Loaded)";
+                }, (xhr) => {
+                    // Progress callback (optional)
+                }, (err) => {
+                    logError("Error loading model: " + err);
+                    statusEl.innerText = "Status: Load Failed";
+                });
+            });
+        }
+
+        // --- Scene Content (The Box & Object) ---
+        function createSceneContent() {
+            // Remove old grid if exists
+            if (gridGroup) scene.remove(gridGroup);
+            gridGroup = new THREE.Group();
+
+            const w = CONFIG.screenWorldWidth;
+            const h = CONFIG.screenWorldHeight || 10; // Fallback if NaN
+            const d = 20; // Depth of the tunnel (Shortened from 40)
+
+            const divs = 20; // Grid divisions
+            // Use Config colors for Grid
+            const mainColor = new THREE.Color(CONFIG.uiColor);
+            const subColor = new THREE.Color(CONFIG.uiColor).multiplyScalar(0.3); // Darker version
+
+            // Function to create a scaled grid helper
+            // GridHelper creates a square grid on the XZ plane centered at 0
+            const makeRectGrid = (width, depth, rX, rY, rZ, pX, pY, pZ) => {
+                // Base size 1, we scale it
+                const grid = new THREE.GridHelper(1, divs, mainColor, subColor);
+                grid.scale.set(width, 1, depth);
+                if (rX) grid.rotation.x = rX;
+                if (rY) grid.rotation.y = rY;
+                if (rZ) grid.rotation.z = rZ;
+
+                grid.position.set(pX, pY, pZ);
+                return grid;
+            };
+
+            // 1. Floor (Bottom)
+            // Centered at y = -h/2. Extends from Z=0 to Z=-d. Center Z = -d/2.
+            gridGroup.add(makeRectGrid(w, d, 0, 0, 0, 0, -h / 2, -d / 2));
+
+            // 2. Ceiling (Top)
+            gridGroup.add(makeRectGrid(w, d, 0, 0, 0, 0, h / 2, -d / 2));
+
+            // 3. Back Wall
+            // Vertical plane at Z = -d. Width w, Height h.
+            gridGroup.add(makeRectGrid(w, h, Math.PI / 2, 0, 0, 0, 0, -d));
+
+            // 4. Left Wall
+            // Vertical plane at x = -w/2. Height h, Depth d.
+            gridGroup.add(makeRectGrid(h, d, 0, 0, Math.PI / 2, -w / 2, 0, -d / 2));
+
+            // 5. Right Wall
+            // Vertical plane at x = w/2. Height h, Depth d.
+            gridGroup.add(makeRectGrid(h, d, 0, 0, Math.PI / 2, w / 2, 0, -d / 2));
+
+            scene.add(gridGroup);
+
+            // B. The Target Object (Default Torus Knot)
+            if (!object) {
+                const geo = new THREE.TorusKnotGeometry(2.5, 0.8, 128, 32);
+                const mat = new THREE.MeshStandardMaterial({
+                    color: 0x88ccff,
+                    metalness: 0.9,
+                    roughness: 0.1,
+                    emissive: 0x224488,
+                    emissiveIntensity: 0.5
+                });
+                object = new THREE.Mesh(geo, mat);
+                object.position.z = CONFIG.objectZ;
+                scene.add(object);
+            } else {
+                // Ensure existing object (if any) respects Z
+                object.position.z = CONFIG.objectZ;
+            }
+
+            // Floating particles (Confine them to the box)
+            if (particles) scene.remove(particles);
+
+            const particlesGeo = new THREE.BufferGeometry();
+            const count = 150; // Reduced density from 500
+            const positions = new Float32Array(count * 3);
+
+            // Loop fix: Iterate exactly 'count' times
+            for (let i = 0; i < count; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * w;     // x
+                positions[i * 3 + 1] = (Math.random() - 0.5) * h;   // y
+                positions[i * 3 + 2] = -Math.random() * d;          // z (0 to -d)
+            }
+
+            particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            // Use Theme Color for particles
+            const particlesMat = new THREE.PointsMaterial({ color: mainColor, size: 0.1 });
+            particles = new THREE.Points(particlesGeo, particlesMat);
+            scene.add(particles);
+        }
+
+        function setupLights() {
+            // Increased Ambient Light for better general visibility
+            ambientLight = new THREE.AmbientLight(0xffffff, BASE_INTENSITY.ambient);
+            scene.add(ambientLight);
+
+            // Stronger "Headlight" attached to user's head position
+            cameraLight = new THREE.PointLight(0xffffff, BASE_INTENSITY.camera, 200);
+            scene.add(cameraLight);
+
+            // Brighter internal lights
+            orangeLight = new THREE.PointLight(0xffaa00, BASE_INTENSITY.orange, 100);
+            orangeLight.position.set(5, 5, -10); // Move inside box
+            scene.add(orangeLight);
+
+            blueLight = new THREE.PointLight(0x0088ff, BASE_INTENSITY.blue, 100);
+            blueLight.position.set(-5, -5, -20); // Move deeper inside box
+            scene.add(blueLight);
+
+            // Apply initial config intensity
+            updateLights(CONFIG.lightIntensity);
+        }
+
+        function updateLights(multiplier) {
+            if (ambientLight) ambientLight.intensity = BASE_INTENSITY.ambient * multiplier;
+            if (cameraLight) cameraLight.intensity = BASE_INTENSITY.camera * multiplier;
+            if (orangeLight) orangeLight.intensity = BASE_INTENSITY.orange * multiplier;
+            if (blueLight) blueLight.intensity = BASE_INTENSITY.blue * multiplier;
+        }
+
+        // --- The Core Math: Off-Axis Projection ---
+        function updateCameraMatrix() {
+            eyePos.lerp(targetEyePos, CONFIG.smoothing);
+
+            // 1. Move Camera to physical eye position (No Rotation!)
+            camera.position.copy(eyePos);
+            camera.rotation.set(0, 0, 0);
+            camera.updateMatrixWorld();
+
+            // Move the camera light to follow the user's head
+            if (cameraLight) {
+                cameraLight.position.copy(eyePos);
+            }
+
+            // 2. Skew Frustum (Off-Axis Projection)
+            const near = 0.1;
+            const far = 1000.0;
+
+            const left = -CONFIG.screenWorldWidth / 2 - eyePos.x;
+            const right = CONFIG.screenWorldWidth / 2 - eyePos.x;
+            const top = CONFIG.screenWorldHeight / 2 - eyePos.y;
+            const bottom = -CONFIG.screenWorldHeight / 2 - eyePos.y;
+            const dist = Math.max(0.1, eyePos.z);
+
+            const l = left * near / dist;
+            const r = right * near / dist;
+            const t = top * near / dist;
+            const b = bottom * near / dist;
+
+            camera.projectionMatrix.makePerspective(l, r, t, b, near, far);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // Rotate based on Rotation Speed slider
+            if (object) {
+                object.rotation.y += 0.005 * CONFIG.rotationSpeed;
+            }
+            updateCameraMatrix();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            if (isFinite(aspect) && aspect !== 0) {
+                CONFIG.screenWorldHeight = CONFIG.screenWorldWidth / aspect;
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                // Rebuild scene to match new aspect ratio
+                createSceneContent();
+            }
+        }
+
+        // --- MediaPipe Implementation ---
+
+        async function setupMediaPipe() {
+            statusEl.innerHTML = "Status: Loading MediaPipe Model...<br><small>(This may take a moment)</small>";
+
+            if (!window.FaceMesh) {
+                logError("MediaPipe library not loaded. Check internet connection.");
+                return;
+            }
+
+            try {
+                const faceMesh = new window.FaceMesh({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                    }
+                });
+
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                faceMesh.onResults(onResults);
+
+                if (typeof window.Camera === "undefined") {
+                    logError("Camera Utils not loaded.");
+                    return;
+                }
+
+                const camera = new window.Camera(videoElement, {
+                    onFrame: async () => {
+                        await faceMesh.send({ image: videoElement });
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                statusEl.innerText = "Status: Requesting Camera Access...";
+                await camera.start();
+            } catch (e) {
+                logError("MediaPipe Error: " + e.message);
+            }
+        }
+
+        function onResults(results) {
+            if (!statusEl.innerText.includes("Loaded")) {
+                statusEl.innerText = "Status: Tracking Active";
+                statusEl.style.color = "#00FF00";
+            }
+
+            // Debug View
+            debugCanvas.width = videoElement.videoWidth;
+            debugCanvas.height = videoElement.videoHeight;
+            debugCtx.save();
+            debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+
+                // Draw Mesh
+                if (window.drawConnectors) {
+                    drawConnectors(debugCtx, landmarks, FaceMesh.FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                }
+
+                // --- Tracking Logic ---
+                const nose = landmarks[168];
+
+                if (nose) {
+                    const cx = (nose.x - 0.5);
+                    const cy = (nose.y - 0.5);
+
+                    targetEyePos.x = -cx * CONFIG.screenWorldWidth * CONFIG.sensitivityX;
+                    targetEyePos.y = -cy * CONFIG.screenWorldHeight * CONFIG.sensitivityY;
+
+                    const leftEye = landmarks[33];
+                    const rightEye = landmarks[263];
+                    const dx = leftEye.x - rightEye.x;
+                    const dy = leftEye.y - rightEye.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    const estimatedZ = (0.15 / dist) * CONFIG.defaultEyeZ;
+                    targetEyePos.z = Math.min(Math.max(estimatedZ, 5), 150);
+                }
+            } else {
+                // Keep status green but maybe indicate lost tracking if needed
+                // statusEl.style.color = "yellow";
+            }
+            debugCtx.restore();
+        }
+
+        // Start
+        window.onload = init;
+        setupMediaPipe();
+
+    </script>
+</body>
+
+</html>
