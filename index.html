@@ -260,9 +260,11 @@
     </div>
 
     <label class="custom-file-upload">
-        <input type="file" id="model-upload" accept=".glb,.gltf,.obj">
-        Upload Model (.glb/.gltf/.obj)
+        <input type="file" id="model-upload" accept=".glb,.gltf,.obj,.ply,.splat,.ksplat,.spz">
+        Upload Model (.glb/.gltf/.obj/.ply/.splat...)
     </label>
+
+    <button id="load-demo-splat-btn" style="margin-top: 5px;">Load Demo Splat (Butterfly)</button>
 
     <button id="reset-btn">Reset Defaults</button>
 </div>
@@ -282,8 +284,9 @@
 <script type="importmap">
         {
             "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
+                "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/0.1.10/spark.module.js"
             }
         }
     </script>
@@ -292,6 +295,7 @@
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+    import { SplatMesh, SplatFileType } from '@sparkjsdev/spark';
 
     // --- Configuration ---
     // Storing defaults to allow reset
@@ -430,6 +434,26 @@
             updateLights(val);
         });
 
+        // Demo Splat Button
+        document.getElementById('load-demo-splat-btn').onclick = () => {
+             statusEl.innerHTML = "Status: Loading Demo Splat...";
+
+             if (object) scene.remove(object);
+
+             const splatURL = "https://sparkjs.dev/assets/splats/butterfly.spz";
+             object = new SplatMesh({ url: splatURL });
+
+             // Butterfly demo is usually small or needs orientation fix
+             // Spark docs example: quaternion.set(1, 0, 0, 0);
+             // position.set(0, 0, -3);
+             object.quaternion.set(1, 0, 0, 0);
+             // We use our scene's object Z
+             object.position.set(0, 0, CONFIG.objectZ);
+
+             scene.add(object);
+             statusEl.innerText = "Status: Tracking Active (Demo Splat Loaded)";
+        };
+
         // Reset Button
         document.getElementById('reset-btn').onclick = () => {
             const currentH = CONFIG.screenWorldHeight;
@@ -502,6 +526,48 @@
             const extension = file.name.split('.').pop().toLowerCase();
 
             statusEl.innerHTML = `Status: Loading ${file.name}...`;
+
+            // Check for Splat formats first
+            if (['ply', 'splat', 'ksplat', 'spz'].includes(extension)) {
+                if (object) scene.remove(object);
+
+                let fileType;
+                if (extension === 'splat') fileType = SplatFileType.SPLAT;
+                else if (extension === 'ksplat') fileType = SplatFileType.KSPLAT;
+                // ply and spz are usually auto-detected but since we pass a blob url,
+                // spark might need help or might handle it.
+                // However, SplatMesh docs say "If the URL contains a path with no obvious file extension..."
+                // Blob URLs have no extension.
+                // We should check if we need to pass fileType for ply/spz.
+                // The docs only explicitly mention SPLAT and KSPLAT enum for manual override.
+                // But let's see if we can map others or if it's fine.
+                // Actually, SplatFileType might have PLY and SPZ.
+                // If not, we might rely on content sniffing which Spark does for PLY/SPZ.
+                // But just in case, let's try to find if SplatFileType has them.
+                // Assuming it does or we can leave it undefined for PLY/SPZ if Spark sniffs magic bytes.
+                // Docs say: "auto-detectable formats .ply and .spz ... auto-detected from the file contents".
+                // So we only strictly need it for splat/ksplat.
+
+                const options = { url: url };
+                if (fileType !== undefined) options.fileType = fileType;
+
+                const splat = new SplatMesh(options);
+                object = splat;
+
+                // Wait for splat to load to center/scale it?
+                // SplatMesh loads async. We might not get bounds immediately.
+                // We can just add it and hope for the best or wait for 'load' event if available.
+                // Spark docs don't explicitly mention a 'load' event on SplatMesh instance, but SplatLoader does.
+                // For simplicity, we add it. Users can adjust position/scale via UI.
+
+                // Manual adjustment for typical splats which might be huge or tiny
+                // object.scale.setScalar(1);
+                object.position.set(0, 0, CONFIG.objectZ);
+
+                scene.add(object);
+                statusEl.innerText = "Status: Tracking Active (Splat Loaded)";
+                return;
+            }
 
             // Select Loader based on extension
             let loader;
